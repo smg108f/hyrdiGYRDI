@@ -667,6 +667,26 @@ void InstrumentView::showCoverMenu()
 }
 
 //==============================================================================
+void PaneToggle::paintButton (Graphics& g, bool highlighted, bool down)
+{
+    auto r = getLocalBounds().toFloat().reduced (1.0f);
+    g.setColour (GyrdiLookAndFeel::panel.withAlpha (highlighted ? 0.95f : 0.75f).brighter (down ? 0.2f : 0.0f));
+    g.fillRoundedRectangle (r, 6.0f);
+    g.setColour (GyrdiLookAndFeel::brass.withAlpha (highlighted ? 0.9f : 0.55f));
+    g.drawRoundedRectangle (r, 6.0f, 1.2f);
+
+    // open pane: chevron points right ("tuck it away"); closed: points left ("pull it out")
+    const auto c = r.getCentre();
+    const float d = paneOpen ? 1.0f : -1.0f;
+    Path chev;
+    chev.startNewSubPath (c.x - 3.0f * d, c.y - 6.0f);
+    chev.lineTo (c.x + 3.0f * d, c.y);
+    chev.lineTo (c.x - 3.0f * d, c.y + 6.0f);
+    g.setColour (GyrdiLookAndFeel::ink);
+    g.strokePath (chev, PathStrokeType (2.0f, PathStrokeType::curved, PathStrokeType::rounded));
+}
+
+//==============================================================================
 HyrdiGyrdiEditor::HyrdiGyrdiEditor (HyrdiGyrdiProcessor& p)
     : AudioProcessorEditor (&p), proc (p), instrument (p)
 {
@@ -690,7 +710,11 @@ HyrdiGyrdiEditor::HyrdiGyrdiEditor (HyrdiGyrdiProcessor& p)
     addAndMakeVisible (crankMode);
     crankModeAttachment = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, hg::ids::crankMode, crankMode);
 
-    setSize (1100, 720);
+    paneToggle.setTooltip ("Show / hide the controls");
+    paneToggle.onClick = [this] { setControlsVisible (! controlsVisible); };
+    addAndMakeVisible (paneToggle);
+
+    setControlsVisible (proc.apvts.state.getProperty (controlsVisibleId, true));
 }
 
 HyrdiGyrdiEditor::~HyrdiGyrdiEditor() { setLookAndFeel (nullptr); }
@@ -724,9 +748,24 @@ HyrdiGyrdiEditor::Toggle* HyrdiGyrdiEditor::addToggle (const char* paramId, cons
     return toggles.back().get();
 }
 
+void HyrdiGyrdiEditor::setControlsVisible (bool shouldShow)
+{
+    controlsVisible = shouldShow;
+    proc.apvts.state.setProperty (controlsVisibleId, shouldShow, nullptr);
+    paneToggle.paneOpen = shouldShow;
+    paneToggle.repaint();
+
+    for (auto& k : knobs) { k->slider.setVisible (shouldShow); k->label.setVisible (shouldShow); }
+    for (auto& t : toggles) t->button.setVisible (shouldShow);
+    crankMode.setVisible (shouldShow);
+
+    setSize (instrumentWidth + (shouldShow ? controlsWidth : 0), editorHeight);
+}
+
 void HyrdiGyrdiEditor::paint (Graphics& g)
 {
     g.fillAll (GyrdiLookAndFeel::bg);
+    if (! controlsVisible) return;
     auto panel = getLocalBounds().withLeft (instrument.getRight()).toFloat();
     g.setColour (GyrdiLookAndFeel::panel);
     g.fillRect (panel);
@@ -748,7 +787,9 @@ void HyrdiGyrdiEditor::paint (Graphics& g)
 
 void HyrdiGyrdiEditor::resized()
 {
-    instrument.setBounds (0, 0, 680, getHeight());
+    instrument.setBounds (0, 0, instrumentWidth, getHeight());
+    paneToggle.setBounds (instrumentWidth - 38, 12, 26, 26);
+    if (! controlsVisible) return;
     const int x0 = instrument.getRight() + 10, cellW = 80, knobH = 58, labelH = 14;
     int y = 28;
     for (size_t si = 0; si < sections.size(); ++si)

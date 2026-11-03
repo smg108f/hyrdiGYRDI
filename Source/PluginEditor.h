@@ -67,6 +67,15 @@ private:
 };
 
 //==============================================================================
+/** small chevron tab that shows / hides the controls pane */
+struct PaneToggle : public juce::Button
+{
+    PaneToggle() : juce::Button ("toggleControls") {}
+    void paintButton (juce::Graphics&, bool highlighted, bool down) override;
+    bool paneOpen = true;
+};
+
+//==============================================================================
 class HyrdiGyrdiEditor : public juce::AudioProcessorEditor
 {
 public:
@@ -91,6 +100,10 @@ private:
 
     Knob* addKnob (const char* paramId, const juce::String& shortName);
     Toggle* addToggle (const char* paramId, const juce::String& text);
+    void setControlsVisible (bool shouldShow);
+
+    static constexpr int instrumentWidth = 680, controlsWidth = 420, editorHeight = 720;
+    static inline const juce::Identifier controlsVisibleId { "controlsVisible" };  // saved with the session
 
     HyrdiGyrdiProcessor& proc;
     GyrdiLookAndFeel lnf;
@@ -99,6 +112,9 @@ private:
     std::vector<std::unique_ptr<Toggle>> toggles;
     std::vector<Section> sections;
     juce::ComboBox crankMode;
+    PaneToggle paneToggle;
+    juce::TooltipWindow tooltips { this, 600 };
+    bool controlsVisible = true;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> crankModeAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HyrdiGyrdiEditor)
