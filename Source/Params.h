@@ -52,8 +52,8 @@ inline const juce::StringArray decor     { "None", "Sigils", "Runes", "Stickers"
 inline const juce::StringArray handler   { "Ghost", "Devil", "Seer", "Witch" };
 inline const juce::StringArray wheel     { "Rosin on Wood", "Blood on Stone", "Polished Metal", "Chalkboard" };
 inline const juce::StringArray pads      { "Cotton", "Bone", "Glass", "Titanium" };
-inline const juce::StringArray strings   { "Gut", "Steel", "Nylon", "Fiber" };
-inline const juce::StringArray familiar  { "Shiba-Soul", "Gremlin", "Troll", "Fairy" };
+inline const juce::StringArray strings   { "Gut-String", "Steel-Wire", "Nylon-Cord", "Fiber-Light", "Hemp-Rope" }; // add new ones at the end
+inline const juce::StringArray familiar  { "Shiba-Soul", "Gremlin", "Troll", "Fairy", "Bees-Nest" }; // add new ones at the end: saved sets store the index
 inline const juce::StringArray crankMode { "While keys held", "Always turning" };
 inline const juce::StringArray keys      { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
 inline const juce::StringArray stringSlot { "Melody 1", "Melody 2", "Familiar 1", "Familiar 2", "Bass 1", "Bass 2", "Sympathy" };

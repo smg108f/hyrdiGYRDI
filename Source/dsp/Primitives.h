@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <vector>
 #include <algorithm>
+#include <complex>
 
 namespace hg
 {
@@ -157,7 +158,12 @@ struct BowedString
         setMaterial (0.70f, 0.95f);
         reset();
     }
-    void reset() { neck.clear(); bridge.clear(); loopY = 0.0f; curF = targetF; }
+    void reset()
+    {
+        neck.clear(); bridge.clear(); loopY = 0.0f; curF = targetF; tunedF = -1.0f;
+        for (auto& a : apX) a = 0.0f;
+        for (auto& a : apY) a = 0.0f;
+    }
 
     void setFrequency (float hz, bool immediate = false)
     {
@@ -169,23 +175,47 @@ struct BowedString
     {
         pole = std::pow (clampf (pole44k, 0.0f, 0.99f), 44100.0f / fs);
         gain = loopGain;
+        tunedF = -1.0f;
     }
-    void setBowPosition (float b) { beta = clampf (b, 0.05f, 0.4f); }
+    /** stiffness: first-order allpass stages in the loop stretch the overtones (wire-like inharmonicity) */
+    void setDispersion (int stages, float coefficient)
+    {
+        apStages = std::clamp (stages, 0, (int) apX.size());
+        apCoef = clampf (coefficient, -0.95f, 0.95f);
+        tunedF = -1.0f;
+    }
+    void setBowPosition (float b) { beta = clampf (b, 0.03f, 0.45f); tunedF = -1.0f; }
+    /** fine tuning correction in samples (positive = flatter), measured per material */
+    void setTuneTrim (float samples) { tuneTrim = samples; tunedF = -1.0f; }
+    /** how the player's pressure maps into the model (each material has its own stable zone) */
+    void setPressureMap (float base, float range, float boost) { pBase = base; pRange = range; pBoost = boost; }
+    /** multiplies the pitch (vibrato / jitter), 1 = none */
+    void setPitchMod (float multiplier) { pitchMul = multiplier; }
 
     float tick (float bowVelocity, float pressure)
     {
         curF += (targetF - curF) * glide;
-        const float base = std::max (4.0f, fs / curF - 4.0f);
-        bridge.setDelay (base * beta);
-        neck.setDelay (base * (1.0f - beta));
+        const float f = curF * pitchMul;
+        if (std::fabs (f - tunedF) > 0.0002f * f) retune (f);
 
         loopY = gain * (1.0f - pole) * bridge.last + pole * loopY;
-        const float bridgeRefl = -loopY;
+        float refl = loopY;
+        for (int k = 0; k < apStages; ++k)     // dispersion (stiff-string) allpasses
+        {
+            const float y = apEff * refl + apX[(size_t) k] - apEff * apY[(size_t) k];
+            apX[(size_t) k] = refl; apY[(size_t) k] = y;
+            refl = y;
+        }
+        const float bridgeRefl = -refl;
         const float nutRefl    = -neck.last;
         const float stringVel  = bridgeRefl + nutRefl;
         const float dv         = bowVelocity - stringVel;
 
-        const float slope = 5.0f - 4.0f * clampf (pressure, 0.0f, 1.0f);
+        // map the player's pressure (0..1) into the model's stable zone; high notes get a little more,
+        // just as players press harder up the neck to keep the string from flipping to a higher mode
+        const float pitchBoost = pBoost * clampf (std::log2 (curF / 350.0f), 0.0f, 1.3f);
+        const float p = clampf (pBase + pRange * clampf (pressure, 0.0f, 1.0f) + pitchBoost, 0.0f, 0.985f);
+        const float slope = 5.0f - 4.0f * p;
         float t = std::fabs (dv * slope) + 0.75f;
         t = 1.0f / (t * t * t * t);
         t = clampf (t, 0.01f, 1.0f);
@@ -196,9 +226,34 @@ struct BowedString
         return bridge.last;
     }
 
-    float fs = 48000.0f, targetF = 220.0f, curF = 220.0f, glide = 0.01f;
+    float fs = 48000.0f, targetF = 220.0f, curF = 220.0f, glide = 0.01f, pitchMul = 1.0f, tunedF = -1.0f;
     float pole = 0.65f, gain = 0.95f, beta = 0.127f, loopY = 0.0f;
+    int apStages = 0; float apCoef = 0.0f, apEff = 0.0f, tuneTrim = 0.0f;
+    float pBase = 0.62f, pRange = 0.36f, pBoost = 0.12f;
+    std::array<float, 4> apX {}, apY {};
     FracDelay neck, bridge;
+
+private:
+    /** sets the two delay lines so the WHOLE loop (delays + loop filter + allpasses) is exactly one period */
+    void retune (float f)
+    {
+        tunedF = f;
+        const float w = twoPi * f / fs;
+        const std::complex<float> z1 = std::polar (1.0f, -w);            // e^{-jw}
+        // one-pole loop filter: H = g(1-p) / (1 - p z^-1)
+        float phase = -std::arg (1.0f - pole * z1);
+        // allpass stages: H = (a + z^-1) / (1 + a z^-1)
+        // stiffness eases off up the range (as on real wire), which also keeps high notes stable
+        apEff = apCoef * clampf (1.4f - 0.5f * std::log2 (f / 200.0f), 0.2f, 1.0f);
+        for (int k = 0; k < apStages; ++k) phase += std::arg (apEff + z1) - std::arg (1.0f + apEff * z1);
+        float extra = -phase / w;                                          // phase delay in samples
+        if (extra < 0.0f) extra += fs / f;                                // keep within one period
+        // the stick-slip junction adds a little delay too; this was measured across loop damping values
+        const float junction = 1.19f + 1.43f * (1.0f - pole) + tuneTrim;
+        const float total = std::max (4.0f, fs / f - extra - junction);
+        bridge.setDelay (total * beta);
+        neck.setDelay (total * (1.0f - beta));
+    }
 };
 
 //==============================================================================

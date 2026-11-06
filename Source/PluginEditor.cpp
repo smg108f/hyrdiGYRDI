@@ -26,8 +26,9 @@ Colour bodyColour (int b)
 }
 Colour stringColour (int s)
 {
-    static const Colour c[4] = { Colour (0xffe8d3a8), Colour (0xffd8e2ea), Colour (0xfff2f0e6), Colour (0xffb59a7a) };
-    return c[jlimit (0, 3, s)];
+    // gut, steel, nylon, fiber-light, hemp
+    static const Colour c[5] = { Colour (0xffe8d3a8), Colour (0xffd8e2ea), Colour (0xfff2f0e6), Colour (0xffbff4ff), Colour (0xffb59a6a) };
+    return c[jlimit (0, 4, s)];
 }
 } // namespace
 
@@ -420,7 +421,9 @@ void InstrumentView::drawCover (Graphics& g)
 
 void InstrumentView::drawFamiliar (Graphics& g, int fam, float exciter)
 {
-    static const Colour fc[4] = { Colour (0xffe8a24a), Colour (0xff6fbf4a), Colour (0xff8a7a66), Colour (0xffe59cff) };
+    // shiba-soul, gremlin, troll, fairy, bees-nest
+    static const Colour fc[5] = { Colour (0xffe8a24a), Colour (0xff6fbf4a), Colour (0xff6f8a86), Colour (0xffd8ecff), Colour (0xfff2c230) };
+    fam = jlimit (0, 4, fam);
     const bool asleep = exciter < 0.02f;
     const float size = 20.0f * (1.0f + 0.35f * famGlow);
     const auto ctr = familiarPos.translated (0.0f, asleep ? 0.0f : -3.0f * famGlow);
@@ -436,9 +439,9 @@ void InstrumentView::drawFamiliar (Graphics& g, int fam, float exciter)
     }
 
     g.setColour (fc[fam]);
-    if (fam == 3) // fairy wings
+    if (fam == 3 || fam == 4) // fairy wings / bee wings
     {
-        g.setColour (fc[fam].withAlpha (0.45f));
+        g.setColour (fam == 3 ? fc[fam].withAlpha (0.45f) : Colours::white.withAlpha (0.35f + 0.2f * std::sin (time * 40.0f)));
         g.fillEllipse (ctr.x - size * 1.6f, ctr.y - size * 1.2f, size * 1.2f, size * 0.9f);
         g.fillEllipse (ctr.x + size * 0.4f, ctr.y - size * 1.2f, size * 1.2f, size * 0.9f);
         g.setColour (fc[fam]);
@@ -453,6 +456,29 @@ void InstrumentView::drawFamiliar (Graphics& g, int fam, float exciter)
     }
     const float bw = fam == 2 ? size * 2.3f : size * 1.8f;
     g.fillEllipse (Rectangle<float> (bw, size * 1.6f).withCentre (ctr));
+    if (fam == 4) // bee stripes
+    {
+        g.setColour (Colour (0xff1a1408));
+        for (int k = -1; k <= 1; ++k)
+            g.fillRect (ctr.x + k * size * 0.5f - 2.0f, ctr.y - size * 0.6f, 4.0f, size * 1.2f);
+    }
+    if (fam == 3 && famGlow > 0.05f) // fairy: twinkling stars
+    {
+        g.setColour (Colours::white.withAlpha (famGlow));
+        for (int k = 0; k < 4; ++k)
+        {
+            const float a = time * 0.7f + (float) k * 1.57f;
+            Path st; st.addStar (ctr + Point<float> (std::cos (a), std::sin (a)) * size * 1.6f, 4, 1.2f, 4.0f);
+            g.fillPath (st);
+        }
+    }
+    if (fam == 2 && famGlow > 0.05f) // troll: water lapping below
+    {
+        g.setColour (Colour (0xff7fc4d8).withAlpha (0.6f * famGlow));
+        Path wv; wv.startNewSubPath (ctr.x - size * 1.4f, ctr.y + size * 0.9f);
+        for (float t = -1.4f; t <= 1.4f; t += 0.1f) wv.lineTo (ctr.x + t * size, ctr.y + size * 0.9f + 3.0f * std::sin (t * 6.0f + time * 3.0f));
+        g.strokePath (wv, PathStrokeType (2.0f));
+    }
 
     // eyes
     g.setColour (Colour (0xff120d0a));
